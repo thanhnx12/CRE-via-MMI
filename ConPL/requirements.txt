@@ -1,0 +1,4 @@
+transformers==4.20.0
+wordninja
+wandb
+numpy==1.23.0
