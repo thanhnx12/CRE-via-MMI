@@ -4,3 +4,7 @@ wandb
 scikit-learn
 tqdm
 numpy==1.23.0
+peft
+accelerate
+sentencepiece
+protobuf
