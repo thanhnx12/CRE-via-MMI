@@ -18,11 +18,9 @@ import os
 from typing import List
 import wandb
 import utils
-import pickle
 
 
 # os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
-
 
 
 def train_simple_model(config, encoder, dropout_layer, classifier, training_data, epochs, map_relid2tempid):
@@ -211,9 +209,6 @@ def train_mem_model(config, encoder, dropout_layer, classifier, training_data, e
             infoNCE_loss = 0
             for i in range(output.shape[0]):
                 neg_prototypes = [prototype[rel_id] for rel_id in prototype.keys() if rel_id != origin_labels[i].item()]
-                # neg_samples = [new_relation_data[rel_id] for rel_id in new_relation_data.keys() if rel_id != origin_labels[i].item()]
-                # neg_prototypes.extend(neg_samples)
-
                 neg_prototypes = torch.stack(neg_prototypes).to(config.device)
                 
                 #--- prepare batch of negative samples 
@@ -334,30 +329,6 @@ def evaluate_strict_model(config, encoder, dropout_layer, classifier, test_data,
             correct += 1
 
     return correct/n
-def save_representation_for_representation(config,  encoder , dropout_layer , classifier , test_data,seen_relations , map_relid2tempid, current_round : str):
-    data_loader = get_data_loader(config, test_data, batch_size = 1)
-    encoder.eval()
-    dropout_layer.eval()
-    classifier.eval()
-    n = len(test_data)
-    mlm_representations = {}
-
-    for step, batch_data in enumerate(data_loader):
-        labels , _ , tokens = batch_data
-        labels = labels.to(config.device)
-        labels = [map_relid2tempid[x.item()] for x in labels]
-        labels = torch.tensor(labels).to(config.device)
-
-        tokens = torch.stack([x.to(config.device) for x in tokens],dim=0)
-        reps , mask_output = encoder(tokens)
-
-        for idx,label in enumerate(labels):
-            if str(label.cpu().data.numpy()) not in mlm_representations:
-                mlm_representations[str(label.cpu().data.numpy())] = []
-            mlm_representations[str(label.cpu().data.numpy())].append(mask_output[idx].cpu().data.numpy())
-    with open(current_round + '_' + 'mlm_representations.pkl','wb') as f:
-        pickle.dump(mlm_representations,f)
-
 
 
 def select_data(config, encoder, dropout_layer, relation_dataset):
@@ -606,7 +577,7 @@ if __name__ == '__main__':
         sampler = data_sampler(config=config, seed=config.seed+rou*100)
 
         config.extended_vocab_size = len(sampler.tokenizer)
-
+        
         id2rel = sampler.id2rel
         rel2id = sampler.rel2id
         id2sentence = sampler.get_id2sent()
@@ -695,12 +666,12 @@ if __name__ == '__main__':
             for relation in current_relations:
                 new_relation_data[rel2id[relation]].extend(generate_current_relation_data(config, encoder,dropout_layer,training_data[relation]))
 
-            # expanded_train_data_for_initial, expanded_prev_samples = data_augmentation(config, encoder,
-            #                                                                            train_data_for_initial,
-            #                                                                            prev_samples)
+            expanded_train_data_for_initial, expanded_prev_samples = data_augmentation(config, encoder,
+                                                                                       train_data_for_initial,
+                                                                                       prev_samples)
             torch.cuda.empty_cache()
             print(len(train_data_for_initial))
-            # print(len(expanded_train_data_for_initial))
+            print(len(expanded_train_data_for_initial))
 
 
             train_mem_model(config, encoder, dropout_layer, classifier, train_data_for_initial, config.step2_epochs, map_relid2tempid, new_relation_data,
@@ -747,9 +718,6 @@ if __name__ == '__main__':
             cur_acc = evaluate_strict_model(config, encoder,dropout_layer,classifier, test_data_1, seen_relations, map_relid2tempid)
             total_acc = evaluate_strict_model(config, encoder, dropout_layer, classifier, test_data_2, seen_relations, map_relid2tempid)
 
-            if steps == 0:
-                save_representation_for_representation(config, encoder, dropout_layer, classifier, test_data_1, seen_relations, map_relid2tempid, f"round_{rou}")
-            
             print(f'Restart Num {rou + 1}')
             print(f'task--{steps + 1}:')
             print(f'current test acc:{cur_acc}')
