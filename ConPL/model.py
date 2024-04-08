@@ -517,6 +517,95 @@ class proto_softmax_layer_bertmlm_prompt(base_model):
     #     save_embedding = save_embedding.detach().to(self.config['device'])
     #     self.bestembedding[thisrel].append(save_embedding)
 
+class proto_softmax_layer_llmmlm_prompt(base_model):
+    """
+    Softmax classifier for sentence-level relation extraction.
+    """
+
+    def __distance__(self, rep, rel):
+        rep_norm = rep / rep.norm(dim=1)[:, None]
+        rel_norm = rel / rel.norm(dim=1)[:, None]
+        res = torch.mm(rep_norm, rel_norm.transpose(0, 1))
+        return res
+
+    def __init__(self, sentence_encoder, num_class, id2rel, drop=0, config=None, rate=1.0, flag=-1):
+        super(proto_softmax_layer_bertmlm_prompt, self).__init__()
+
+        self.config = config
+        self.flag = flag
+        self.sentence_encoder = sentence_encoder
+        self.num_class = num_class
+        self.hidden_size = self.sentence_encoder.output_size
+        self.fc = nn.Linear(self.hidden_size, self.num_class, bias=False)
+        self.drop = nn.Dropout(drop)
+        self.id2rel = id2rel
+        self.rel2id = {}
+        for id, rel in id2rel.items():
+            self.rel2id[rel] = id
+        self.bestproto_list = []#cxd
+        self.bestproto = None#cxd
+        self.haveseenrelations = []#cxd
+        # self.haveseenrelations_process = []#cxd
+        # self.currentrelations = []#cxd
+        self.bestembedding = [[] for i in range(num_class)]
+
+    def set_memorized_prototypes_midproto(self, protos):
+        self.prototypes = protos.detach().to(self.config['device'])
+        if self.bestproto != None:
+            self.prototypes[self.haveseenrelations] = self.bestproto#cxd
+
+
+    def get_feature(self, input_ids, attention_mask, att_mask_0):
+        rep , _, _ = self.sentence_encoder(input_ids=input_ids, attention_mask=attention_mask, att_mask_0=att_mask_0)
+        return rep.cpu().data.numpy()
+
+    def get_mem_feature(self, rep):
+        dis = self.mem_forward(rep)
+        return dis.cpu().data.numpy()
+
+    def forward(self, input_ids, attention_mask, att_mask_0):
+        """
+        Args:
+            args: depends on the encoder
+        Return:
+            logits, (B, N)
+        """
+        rep , lmhead_output, mlm_loss = self.sentence_encoder(input_ids=input_ids, attention_mask=attention_mask, att_mask_0=att_mask_0)  # (B, H)
+        repd = self.drop(rep)
+        logits = self.fc(repd)
+        return logits, rep , lmhead_output, mlm_loss
+
+    def mem_forward(self, rep):
+        """
+        Args:
+            args: depends on the encoder
+        Return:
+            logits, (B, N)
+        """
+        dis_mem = self.__distance__(rep, self.prototypes)
+        return dis_mem
+    
+    def mem_forward_update(self, rep, current_proto):
+        """
+        Args:
+            args: depends on the encoder
+        Return:
+            logits, (B, N)
+        """
+        dis_mem = self.__distance__(rep, current_proto)
+        return dis_mem
+    
+    def save_bestproto(self, currentrelations):#cxd
+        self.haveseenrelations.extend(currentrelations)
+        # self.haveseenrelations_process.append(self.haveseenrelations)
+        # self.currentrelations.append(currentrelations)
+        self.bestproto_list.append(self.prototypes[currentrelations])
+        self.bestproto = torch.cat(self.bestproto_list, 0)
+
+    # def save_memory_embedding(self, thisrel, save_embedding):
+    #     save_embedding = save_embedding.detach().to(self.config['device'])
+    #     self.bestembedding[thisrel].append(save_embedding)
+
 
 class proto_softmax_layer_transformer(base_model):
     """

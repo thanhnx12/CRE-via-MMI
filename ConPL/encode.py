@@ -155,6 +155,7 @@ class LlamaLMClassification(GemmaPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
+        att_mask_0: Optional[torch.Tensor] = None,
     ) -> Union[Tuple, CausalLMOutputWithPast]:
         
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -179,13 +180,13 @@ class LlamaLMClassification(GemmaPreTrainedModel):
 
         hidden_states = outputs[0] #B, N, H
 
+        hidden_states = outputs[0] #B, N, H
+
         e11 = []
-        # for each sample in the batch, acquire the positions of its [E11] and [E21]
-        for mask in attention_mask:
+        for mask in att_mask_0:
             e11.append(mask.sum().item() - 1)
         
         output = []
-        # for each sample in the batch, acquire its representations for [E11] and [E21]
         for i in range(len(e11)):
             instance_output = torch.index_select(hidden_states, 0, torch.tensor(i).to(hidden_states.device))
             instance_output = torch.index_select(instance_output, 1, torch.tensor([e11[i]]).to(hidden_states.device))
@@ -195,7 +196,14 @@ class LlamaLMClassification(GemmaPreTrainedModel):
         logit = self.lm_head(output) # B,1,V
         output = output.view(output.shape[0],-1) # [B,1,H] --> [B,H]
 
-        return output, logit.squeeze(1)
+        mlm_loss = 0
+        for i, hidden in enumerate(hidden_states):
+            start = att_mask_0[i].sum().item()
+            end = attention_mask[i].sum().item()
+            logits = self.lm_head(hidden[start:end])
+            mlm_loss += F.cross_entropy(input=logits, target = input_ids[start:end])
+
+        return output, logit.squeeze(1), mlm_loss/hidden_states.shape[0]
     
 class base_encoder(base_model):
 
