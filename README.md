@@ -1,13 +1,16 @@
-# CRE via MMI
+# Preserving Model Generalization in Few-shot Relation Extraction
 
-## Requirements
+## Official code repository for the work:
+"Preserving Model Generalization in Few-shot Relation Extraction".
+
+## Environment
 ```
 pip install -r requirements.txt
 ```
 
-## Run scripts
+## Run scripts bellow to reproduce the reported results: 
 
-### TacRed
+### On TacRed
 
 [Wandb logs here](https://wandb.ai/banana1209/DATN/runs/hnaifl2y/logs?nw=nwuserthanhnx1209)
 ```bash
@@ -21,7 +24,7 @@ pip install -r requirements.txt
 >> python main.py --task tacred --shot 5  
 ```
 
-### FewRel
+### On FewRel
 
 [Wandb logs here](https://wandb.ai/banana1209/DATN/runs/ijm94ol7/logs?nw=nwuserthanhnx1209)
 ```bash
