@@ -200,8 +200,9 @@ class LlamaLMClassification(GemmaPreTrainedModel):
         for i, hidden in enumerate(hidden_states):
             start = att_mask_0[i].sum().item()
             end = attention_mask[i].sum().item()
-            logits = self.lm_head(hidden[start:end])
-            mlm_loss += F.cross_entropy(input=logits, target = input_ids[start:end])
+            if end > start:
+                logits = self.lm_head(hidden[start:end])
+                mlm_loss += F.cross_entropy(input=logits, target = input_ids[start:end])
 
         return output, logit.squeeze(1), mlm_loss/hidden_states.shape[0]
     
