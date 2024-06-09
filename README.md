@@ -2,12 +2,34 @@
 
 ## Requirements
 ```
-pip install -r requirements.txt
+transformers==4.20.0
+wordninja
+wandb
+scikit-learn
+tqdm
+numpy==1.23.0
+peft
+accelerate
+sentencepiece
+protobuf
 ```
 
-## Run scripts
+## Datasets
+We conduct our experiments on two public relation extraction datasets:
+- [FewRel](https://github.com/thunlp/FewRel)
+- [TACRED](https://nlp.stanford.edu/projects/tacred/)
+
+## Train
+To run our method, use these command:
+
 ### BERT
 #### TacRed
+
+
+```bash
+>> cd CPL/bash
+>> bash tacred_5shot.sh
+```
 
 ```bash
 >> cd SCKD
@@ -20,6 +42,12 @@ pip install -r requirements.txt
 ```
 
 #### FewRel
+
+
+```bash
+>> cd CPL/bash
+>> bash fewrel_5shot.sh
+```
 
 ```bash
 >> cd SCKD

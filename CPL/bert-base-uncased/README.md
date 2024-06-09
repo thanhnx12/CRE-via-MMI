@@ -1,0 +1,1 @@
+Please go to [huggingface website](https://huggingface.co/models) to download  bert-base-uncased model to this directory.
