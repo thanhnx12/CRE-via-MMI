@@ -4,6 +4,9 @@ import numpy as np
 from transformers import BertModel
 from transformers import RobertaModel
 from transformers import BertForMaskedLM
+from transformers.models.llama.modeling_llama import *
+from transformers.models.mistral.modeling_mistral import *
+
 class EncodingModel(nn.Module):
     def __init__(self, config):
         nn.Module.__init__(self)
@@ -122,3 +125,333 @@ class EncodingModel(nn.Module):
             concerate_h_t = (h_state + t_state) / 2 # (b, h)
             return concerate_h_t
 
+class LlamaClassification(LlamaPreTrainedModel):
+    def __init__(self, config):
+        super().__init__(config)
+        # self.num_labels = config.num_labels
+        self.model = LlamaModel(config)
+        # self.ln = nn.Linear(config.hidden_size, self.config.hidden_size, bias=True)
+        # self.dropout = nn.Dropout(0.1)
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    def get_input_embeddings(self):
+        return self.model.embed_tokens
+
+    def set_input_embeddings(self, value):
+        self.model.embed_tokens = value
+
+    @add_start_docstrings_to_model_forward(LLAMA_INPUTS_DOCSTRING)
+    def forward(
+        self,
+        input_ids: torch.LongTensor = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        past_key_values: Optional[List[torch.FloatTensor]] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        labels: Optional[torch.LongTensor] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        get_feature: Optional[bool] = False,
+    ) -> Union[Tuple, SequenceClassifierOutputWithPast]:
+        r"""
+        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
+            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
+            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
+            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
+        """
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        transformer_outputs = self.model(
+            input_ids,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            past_key_values=past_key_values,
+            inputs_embeds=inputs_embeds,
+            use_cache=use_cache,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+        hidden_states = transformer_outputs[0]
+        
+
+        e11 = []
+        # for each sample in the batch, acquire the positions of its [E11] and [E21]
+        for mask in attention_mask:
+            e11.append(mask.sum().item() - 1)
+        
+        output = []
+        for i in range(len(e11)):
+            instance_output = torch.index_select(hidden_states, 0, torch.tensor(i).to(hidden_states.device))
+            instance_output = torch.index_select(instance_output, 1, torch.tensor([e11[i]]).to(hidden_states.device))
+            output.append(instance_output)  # [B,N,H] --> [B,1,H]
+        
+        output = torch.stack(output)
+        output = output.view(output.shape[0],-1) # [B,1,H] --> [B,H]
+        return output.to(torch.float32), None
+    
+class LlamaLMClassification(LlamaPreTrainedModel):
+    _tied_weights_keys = ["lm_head.weight"]
+
+    def __init__(self, config):
+        super().__init__(config, bottle_neck_size=512)
+        self.model = LlamaModel(config)
+        self.vocab_size = config.vocab_size
+        self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
+        self.bottle_neck = nn.Linear(config.vocab_size, bottle_neck_size, bias=False)
+        self.info_nce_fc = nn.Linear(bottle_neck_size, config.hidden_size , bias= False)
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    def infoNCE_f(self,V,C):
+        """
+        V : 1 x dim_V
+        C : 1 x dim_C
+
+        """
+        V = self.bottle_neck(V)
+        out = self.info_nce_fc(V) # N x dim_C
+        out = torch.matmul(out, C.t().to(out.device)) # N x N
+        return out
+
+    def get_input_embeddings(self):
+        return self.model.embed_tokens
+
+    def set_input_embeddings(self, value):
+        self.model.embed_tokens = value
+
+    def get_output_embeddings(self):
+        return self.lm_head
+
+    def set_output_embeddings(self, new_embeddings):
+        self.lm_head = new_embeddings
+
+    def set_decoder(self, decoder):
+        self.model = decoder
+
+    def get_decoder(self):
+        return self.model
+
+    def forward(
+        self,
+        input_ids: torch.LongTensor = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        past_key_values: Optional[List[torch.FloatTensor]] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        labels: Optional[torch.LongTensor] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        cache_position: Optional[torch.LongTensor] = None,
+    ) -> Union[Tuple, CausalLMOutputWithPast]:
+
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        e11 = []
+        # for each sample in the batch, acquire the positions of its [E11] and [E21]
+        for mask in attention_mask:
+            e11.append(mask.sum().item() - 1)
+
+        max_length = max(e11) + 1
+
+        # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
+        outputs = self.model(
+            input_ids=input_ids[:max_length],
+            attention_mask=attention_mask[:max_length],
+            position_ids=position_ids,
+            past_key_values=past_key_values,
+            inputs_embeds=inputs_embeds,
+            use_cache=use_cache,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+            cache_position=cache_position,
+        )
+
+        hidden_states = outputs[0] #B, N, H
+        
+        output = []
+        # for each sample in the batch, acquire its representations for [E11] and [E21]
+        for i in range(len(e11)):
+            instance_output = torch.index_select(hidden_states, 0, torch.tensor(i).to(hidden_states.device))
+            instance_output = torch.index_select(instance_output, 1, torch.tensor([e11[i]]).to(hidden_states.device))
+            output.append(instance_output)  # [B,N,H] --> [B,1,H]
+        
+        output = torch.stack(output)
+        logit = self.lm_head(output) # B,1,V
+        output = output.view(output.shape[0],-1) # [B,1,H] --> [B,H]
+
+        return output, logit.squeeze(1)
+
+class MistralClassification(MistralPreTrainedModel):
+    def __init__(self, config):
+        super().__init__(config)
+        # self.num_labels = config.num_labels
+        self.model = MistralModel(config)
+        # self.ln = nn.Linear(config.hidden_size, self.config.hidden_size, bias=True)
+        # self.dropout = nn.Dropout(0.1)
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    def get_input_embeddings(self):
+        return self.model.embed_tokens
+
+    def set_input_embeddings(self, value):
+        self.model.embed_tokens = value
+
+    def forward(
+        self,
+        input_ids: torch.LongTensor = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        past_key_values: Optional[List[torch.FloatTensor]] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        labels: Optional[torch.LongTensor] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        get_feature: Optional[bool] = False,
+    ) -> Union[Tuple, SequenceClassifierOutputWithPast]:
+
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        transformer_outputs = self.model(
+            input_ids,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            past_key_values=past_key_values,
+            inputs_embeds=inputs_embeds,
+            use_cache=use_cache,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+        hidden_states = transformer_outputs[0]
+        
+
+        e11 = []
+        # for each sample in the batch, acquire the positions of its [E11] and [E21]
+        for mask in attention_mask:
+            e11.append(mask.sum().item() - 1)
+        
+        output = []
+        for i in range(len(e11)):
+            instance_output = torch.index_select(hidden_states, 0, torch.tensor(i).to(hidden_states.device))
+            instance_output = torch.index_select(instance_output, 1, torch.tensor([e11[i]]).to(hidden_states.device))
+            output.append(instance_output)  # [B,N,H] --> [B,1,H]
+        
+        output = torch.stack(output)
+        output = output.view(output.shape[0],-1) # [B,1,H] --> [B,H]
+        return output.to(torch.float32), None
+
+
+class MistralLMClassification(MistralPreTrainedModel):
+    _tied_weights_keys = ["lm_head.weight"]
+
+    def __init__(self, config):
+        super().__init__(config)
+        self.model = MistralModel(config)
+        self.vocab_size = config.vocab_size
+        self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
+        self.info_nce_fc = nn.Linear(config.vocab_size, config.hidden_size , bias= False)
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    def infoNCE_f(self,V,C):
+        """
+        V : 1 x dim_V
+        C : 1 x dim_C
+
+        """
+        out = self.info_nce_fc(V) # N x dim_C
+        out = torch.matmul(out, C.t().to(out.device)) # N x N
+        return out
+
+    def get_input_embeddings(self):
+        return self.model.embed_tokens
+
+    def set_input_embeddings(self, value):
+        self.model.embed_tokens = value
+
+    def get_output_embeddings(self):
+        return self.lm_head
+
+    def set_output_embeddings(self, new_embeddings):
+        self.lm_head = new_embeddings
+
+    def set_decoder(self, decoder):
+        self.model = decoder
+
+    def get_decoder(self):
+        return self.model
+
+    def forward(
+        self,
+        input_ids: torch.LongTensor = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        past_key_values: Optional[List[torch.FloatTensor]] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        labels: Optional[torch.LongTensor] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        cache_position: Optional[torch.LongTensor] = None,
+    ) -> Union[Tuple, CausalLMOutputWithPast]:
+
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        e11 = []
+        # for each sample in the batch, acquire the positions of its [E11] and [E21]
+        for mask in attention_mask:
+            e11.append(mask.sum().item() - 1)
+
+        max_length = max(e11) + 1
+
+        # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
+        outputs = self.model(
+            input_ids=input_ids[:max_length],
+            attention_mask=attention_mask[:max_length],
+            position_ids=position_ids,
+            past_key_values=past_key_values,
+            inputs_embeds=inputs_embeds,
+            use_cache=use_cache,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+            cache_position=cache_position,
+        )
+
+        hidden_states = outputs[0] #B, N, H
+        
+        output = []
+        # for each sample in the batch, acquire its representations for [E11] and [E21]
+        for i in range(len(e11)):
+            instance_output = torch.index_select(hidden_states, 0, torch.tensor(i).to(hidden_states.device))
+            instance_output = torch.index_select(instance_output, 1, torch.tensor([e11[i]]).to(hidden_states.device))
+            output.append(instance_output)  # [B,N,H] --> [B,1,H]
+        
+        output = torch.stack(output)
+        logit = self.lm_head(output) # B,1,V
+        output = output.view(output.shape[0],-1) # [B,1,H] --> [B,H]
+
+        return output, logit.squeeze(1)

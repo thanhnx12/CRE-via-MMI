@@ -61,6 +61,7 @@ To run our method, use these command:
 ### LLAMA2
 * put `hf_token` to `main-llm.py` and `dataprocess.py` for `ConPL`
 * put `hf_token` to `sampler.py`, `main-llm.py` and `main-llm-mmi.py` for `SCKD`
+
 #### TacRed
 ```bash
 >> cd SCKD
