@@ -1,7 +1,11 @@
-# Preserving Generalization of LLM in FCRE
+# Preserving Generalization of LLMs in Few-shot Continual Relation Extraction (FCRE)
+
+## Overview
+This repository provides the implementation of our method described in the paper _"Preserving Generalization of Language Models in Few-shot Continual Relation Extraction."_ Our approach leverages underutilized language model heads with mutual information maximization to maintain pre-trained knowledge and enhance few-shot continual learning for relation extraction.
 
 ## Requirements
-```
+To run the code, please install the following dependencies:
+```bash
 transformers==4.20.0
 wordninja
 wandb
@@ -15,72 +19,94 @@ protobuf
 ```
 
 ## Datasets
-We conduct our experiments on two public relation extraction datasets:
-- [FewRel](https://github.com/thunlp/FewRel)
-- [TACRED](https://nlp.stanford.edu/projects/tacred/)
+We perform experiments using two publicly available relation extraction datasets:
 
-## Train
-To run our method, use these command:
+- **[FewRel](https://github.com/thunlp/FewRel)**: A large-scale few-shot relation extraction dataset.
+- **[TACRED](https://nlp.stanford.edu/projects/tacred/)**: A widely-used dataset for relation classification.
 
-### BERT
-#### TacRed
+## Training
+### BERT-based Models
 
+#### TACRED
+To train BERT models on TACRED with 5-shot settings, follow these steps:
 
-```bash
->> cd CPL/bash
->> bash tacred_5shot.sh
-```
+1. Navigate to the CPL scripts directory:
+   ```bash
+   cd CPL/bash
+   ```
+2. Run the 5-shot training script:
+   ```bash
+   bash tacred_5shot.sh
+   ```
 
-```bash
->> cd SCKD
->> python main-mmi.py --task tacred --shot 5 
-```
+Alternatively, you can directly run the training script for different components:
 
-```bash
->> cd ConPL
->> python main.py --task tacred --shot 5  
-```
+1. For SCKD with Mutual Information Maximization (MMI):
+   ```bash
+   cd SCKD
+   python main-mmi.py --task tacred --shot 5 
+   ```
+
+2. For ConPL:
+   ```bash
+   cd ConPL
+   python main.py --task tacred --shot 5  
+   ```
+
+#### FewRel
+To train BERT models on FewRel with 5-shot settings:
+
+1. Run the 5-shot script from the CPL directory:
+   ```bash
+   cd CPL/bash
+   bash fewrel_5shot.sh
+   ```
+
+2. Alternatively, run the training commands directly:
+
+   - SCKD with MMI:
+     ```bash
+     cd SCKD
+     python main-mmi.py --task fewrel --shot 5 
+     ```
+
+   - ConPL:
+     ```bash
+     cd ConPL
+     python main.py --task fewrel --shot 5  
+     ```
+
+### LLAMA2-based Models
+
+To train using LLAMA2, ensure that you have set up your Hugging Face token (`hf_token`) in the required scripts:
+
+- For ConPL, add the token in `main-llm.py` and `dataprocess.py`.
+- For SCKD, add the token in `sampler.py`, `main-llm.py`, and `main-llm-mmi.py`.
+
+#### TACRED
+
+1. To run SCKD with MMI:
+   ```bash
+   cd SCKD
+   python main-llm-mmi.py --task tacred --shot 5 
+   ```
+
+2. To run ConPL:
+   ```bash
+   cd ConPL
+   python main-llm.py --task tacred --shot 5  
+   ```
 
 #### FewRel
 
+1. To run SCKD with MMI:
+   ```bash
+   cd SCKD
+   python main-llm-mmi.py --task fewrel --shot 5 
+   ```
 
-```bash
->> cd CPL/bash
->> bash fewrel_5shot.sh
-```
-
-```bash
->> cd SCKD
->> python main-mmi.py --task FewRel --shot 5 
-```
-
-```bash
->> cd ConPL
->> python main.py --task fewrel --shot 5  
-```
-### LLAMA2
-* put `hf_token` to `main-llm.py` and `dataprocess.py` for `ConPL`
-* put `hf_token` to `sampler.py`, `main-llm.py` and `main-llm-mmi.py` for `SCKD`
-
-#### TacRed
-```bash
->> cd SCKD
->> python main-llm-mmi.py --task tacred --shot 5 
-```
-
-```bash
->> cd ConPL
->> python main-llm.py --task tacred --shot 5  
-```
-
-#### FewRel
-```bash
->> cd SCKD
->> python main-llm-mmi.py --task FewRel --shot 5 
-```
-
-```bash
->> cd ConPL
->> python main-llm.py --task fewrel --shot 5  
-```
-
+2. To run ConPL:
+   ```bash
+   cd ConPL
+   python main-llm.py --task fewrel --shot 5  
+   ```
