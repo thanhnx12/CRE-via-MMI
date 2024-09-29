@@ -1,4 +1,4 @@
-# CRE via MMI
+# Preserving Generalization of LLM in FCRE
 
 ## Requirements
 ```
