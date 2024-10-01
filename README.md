@@ -1,7 +1,8 @@
 # Preserving Generalization of LLMs in Few-shot Continual Relation Extraction (FCRE)
 
 ## Overview
-This repository provides the implementation of our method described in the paper _"Preserving Generalization of Language Models in Few-shot Continual Relation Extraction."_ Our approach leverages underutilized language model heads with mutual information maximization to maintain pre-trained knowledge and enhance few-shot continual learning for relation extraction.
+This repository provides the implementation for "Preserving Generalization of Language Models in Few-shot Continual Relation Extraction."
+Our approach leverages underutilized language model heads with mutual information maximization to maintain pre-trained knowledge and enhance few-shot continual learning for relation extraction.
 
 ## Requirements
 To run the code, please install the following dependencies:
