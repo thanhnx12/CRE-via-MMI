@@ -1,6 +1,6 @@
 # Preserving Generalization of Language Models in Few-shot Continual Relation Extraction
 
-This repository provides the implementation for "Preserving Generalization of Language Models in Few-shot Continual Relation Extraction."
+This repository provides the implementation for "Preserving Generalization of Language Models in Few-shot Continual Relation Extraction (EMNLP2024)."
 
 ## Requirements
 To run the code, please install the following dependencies:
